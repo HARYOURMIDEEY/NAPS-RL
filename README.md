@@ -146,3 +146,9 @@ Student registration already creates a six-digit email verification code and sen
 The Super Admin console includes **Ads & campaigns**. Super Admins can publish a title, message, optional banner image, destination button, audience (all students or a level), start time, and optional end time. Active campaigns are displayed in the authenticated student interface and can be dismissed for the current page view. Image uploads use Vercel Blob and are limited to 5 MB. Configure `BLOB_READ_WRITE_TOKEN` in Vercel.
 
 After updating the schema, run `npm run db:push` locally or as a controlled deployment step to create the `Campaign` table. Then redeploy the application. The campaign API is Super Admin-only; normal Admin accounts cannot publish or modify campaigns.
+
+## Recent release-candidate changes
+
+- Student email verification is disabled: new accounts are marked verified at registration and can sign in immediately. Existing accounts previously marked unverified can also sign in. Email is still collected as a contact address; password-reset emails may still require SMTP configuration.
+- Added a Super Admin-only **Admin Management** page at `/admin/admins`. It can promote existing student accounts to ordinary Admin and revoke ordinary Admin access. It cannot modify Super Admin accounts. Role changes invalidate the target user's current session.
+- These changes require deploying this updated source to the existing Vercel project. They have not been verified against the live production database; test registration, login, and admin role changes after deployment.
