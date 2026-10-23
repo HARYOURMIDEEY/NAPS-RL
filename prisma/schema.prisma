@@ -1,0 +1,370 @@
+// NAPS FUTMinna Physics E-Learning Platform — Database Schema
+// Real schema, ready to connect: set DATABASE_URL in .env, then `npm run db:push`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum MaterialType {
+  LECTURE_NOTE
+  PAST_QUESTION
+  ASSIGNMENT
+  SOLUTION
+  STUDY_GUIDE
+  REFERENCE
+  OTHER
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ExamAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+model User {
+  id                  String    @id @default(cuid())
+  fullName            String
+  username            String    @unique
+  studentEmail        String?   @unique
+  personalEmail       String    @unique
+  matricNumber        String?   @unique
+  phoneNumber         String?
+  level               Int?
+  passwordHash        String
+  role                Role      @default(STUDENT)
+  isEmailVerified     Boolean   @default(false)
+  isActive            Boolean   @default(true)
+  isSuspended         Boolean   @default(false)
+  mustChangePassword  Boolean   @default(false)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  sessionVersion      Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  permissions         AdminPermission[]
+  quizAttempts        QuizAttempt[]
+  examAttempts        ExamAttempt[]
+  materialsUploaded   Material[]              @relation("UploadedBy")
+  leaderboardEntries  LeaderboardEntry[]
+  userBadges          UserBadge[]
+  notifications       Notification[]
+  aiConversations     AIConversation[]
+  auditLogs           AuditLog[]              @relation("ActorLogs")
+  emailCodes          EmailVerificationCode[]
+  resetTokens         PasswordResetToken[]
+  campaignsCreated    Campaign[]              @relation("CampaignCreatedBy")
+
+  @@index([role])
+  @@index([level])
+}
+
+model AdminPermission {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  key    String
+
+  @@unique([userId, key])
+}
+
+model Course {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  title     String
+  level     Int
+  topics    Topic[]
+  materials Material[]
+  questions Question[]
+  quizzes   Quiz[]
+  exams     Exam[]
+}
+
+model Topic {
+  id        String     @id @default(cuid())
+  name      String
+  courseId  String
+  course    Course     @relation(fields: [courseId], references: [id])
+  materials Material[]
+  questions Question[]
+}
+
+model Material {
+  id              String       @id @default(cuid())
+  title           String
+  description     String?
+  level           Int
+  courseId        String
+  course          Course       @relation(fields: [courseId], references: [id])
+  topicId         String?
+  topic           Topic?       @relation(fields: [topicId], references: [id])
+  materialType    MaterialType
+  academicSession String?
+  semester        String?
+  fileUrl         String
+  fileType        String
+  fileSizeBytes   Int
+  uploadedById    String
+  uploadedBy      User         @relation("UploadedBy", fields: [uploadedById], references: [id])
+  viewCount       Int          @default(0)
+  downloadCount   Int          @default(0)
+  createdAt       DateTime     @default(now())
+
+  @@index([level, courseId])
+}
+
+model Question {
+  id              String             @id @default(cuid())
+  text            String
+  courseId        String
+  course          Course             @relation(fields: [courseId], references: [id])
+  topicId         String?
+  topic           Topic?             @relation(fields: [topicId], references: [id])
+  level           Int
+  difficulty      QuestionDifficulty
+  options         QuestionOption[]
+  correctOptionId String?
+  explanation     String?
+  source          String?
+  createdById     String
+  createdAt       DateTime           @default(now())
+  quizzes         QuizQuestion[]
+  exams           ExamQuestion[]
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  text       String
+}
+
+model Quiz {
+  id         String              @id @default(cuid())
+  title      String
+  courseId   String
+  course     Course              @relation(fields: [courseId], references: [id])
+  level      Int
+  difficulty QuestionDifficulty?
+  questions  QuizQuestion[]
+  attempts   QuizAttempt[]
+  createdAt  DateTime            @default(now())
+}
+
+model QuizQuestion {
+  id         String   @id @default(cuid())
+  quizId     String
+  quiz       Quiz     @relation(fields: [quizId], references: [id])
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  order      Int
+}
+
+model QuizAttempt {
+  id          String    @id @default(cuid())
+  quizId      String
+  quiz        Quiz      @relation(fields: [quizId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  answers     Json
+  score       Int
+  percentage  Float
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([userId])
+}
+
+model Exam {
+  id                 String         @id @default(cuid())
+  title              String
+  courseId           String
+  course             Course         @relation(fields: [courseId], references: [id])
+  level              Int
+  durationMinutes    Int
+  startAt            DateTime
+  endAt              DateTime
+  attemptLimit       Int            @default(1)
+  passMark           Float
+  randomizeQuestions Boolean        @default(true)
+  randomizeAnswers   Boolean        @default(true)
+  revealAnswers      Boolean        @default(false)
+  questions          ExamQuestion[]
+  attempts           ExamAttempt[]
+}
+
+model ExamQuestion {
+  id         String   @id @default(cuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id])
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  order      Int
+}
+
+model ExamAttempt {
+  id            String            @id @default(cuid())
+  examId        String
+  exam          Exam              @relation(fields: [examId], references: [id])
+  userId        String
+  user          User              @relation(fields: [userId], references: [id])
+  answers       Json?
+  score         Int?
+  percentage    Float?
+  serverStartAt DateTime          @default(now())
+  serverEndAt   DateTime
+  submittedAt   DateTime?
+  status        ExamAttemptStatus @default(IN_PROGRESS)
+
+  @@index([userId])
+}
+
+model Announcement {
+  id             String    @id @default(cuid())
+  title          String
+  content        String
+  imageUrl       String?
+  priority       String    @default("NORMAL")
+  publishAt      DateTime  @default(now())
+  expireAt       DateTime?
+  targetLevel    Int?
+  targetAudience String    @default("ALL")
+}
+
+
+model Campaign {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  imageUrl    String?
+  ctaLabel    String?
+  ctaUrl      String?
+  targetLevel Int?
+  isActive    Boolean  @default(true)
+  startsAt    DateTime @default(now())
+  endsAt      DateTime?
+  createdById String
+  createdBy   User     @relation("CampaignCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, startsAt, endsAt])
+  @@index([targetLevel])
+}
+
+model Badge {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String
+  ruleKey     String
+  userBadges  UserBadge[]
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  badgeId  String
+  badge    Badge    @relation(fields: [badgeId], references: [id])
+  earnedAt DateTime @default(now())
+
+  @@unique([userId, badgeId])
+}
+
+model LeaderboardEntry {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  period String
+  points Int
+  rank   Int
+
+  @@unique([userId, period])
+  @@index([period])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AIConversation {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  title     String
+  createdAt DateTime    @default(now())
+  messages  AIMessage[]
+}
+
+model AIMessage {
+  id              String         @id @default(cuid())
+  conversationId  String
+  conversation    AIConversation @relation(fields: [conversationId], references: [id])
+  role            String
+  content         String
+  grounded        Boolean        @default(false)
+  usedMaterialIds String[]
+  createdAt       DateTime       @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actor     User     @relation("ActorLogs", fields: [actorId], references: [id])
+  action    String
+  resource  String
+  status    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model EmailVerificationCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  codeHash  String
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
